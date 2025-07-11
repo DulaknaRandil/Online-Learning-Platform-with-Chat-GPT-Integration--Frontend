@@ -3,11 +3,12 @@ import axios from 'axios'
 // Get API URL from environment
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
 
-// Only log in development
-if (process.env.NODE_ENV === 'development') {
-  console.log('API URL from env:', process.env.NEXT_PUBLIC_API_URL);
-  console.log('Using API URL:', API_URL);
-}
+// Always log environment info for debugging
+console.log('=== API CONFIGURATION DEBUG ===');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('NEXT_PUBLIC_API_URL from env:', process.env.NEXT_PUBLIC_API_URL);
+console.log('Final API_URL being used:', API_URL);
+console.log('================================');
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -83,16 +84,10 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    // Enhanced error logging - especially for direct endpoints
+    // Enhanced error logging
     const isDirectEndpoint = error.config?.url?.includes('direct-');
     
-    console.error(`❌ API ${isDirectEndpoint ? 'DIRECT ' : ''}ERROR [${error.config?.method?.toUpperCase() || 'UNKNOWN'}] ${error.config?.url || 'unknown'}:`, {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message,
-      stack: isDirectEndpoint ? error.stack : undefined
-    });
+    console.error(`❌ API ${isDirectEndpoint ? 'DIRECT ' : ''}ERROR [${error.config?.method?.toUpperCase() || 'UNKNOWN'}] ${error.config?.url || 'unknown'}:`, error);
     
     // Handle specific error cases
     if (error.response) {
@@ -169,7 +164,8 @@ api.interceptors.response.use(
       // Check if we have a connection to the server
       const checkServerHealth = async () => {
         try {
-          await fetch(`${API_URL}/health`);
+          // Use the same API_URL that was configured at the top
+          await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/health`);
           return true;
         } catch {
           return false;
