@@ -93,10 +93,30 @@ src/
 
 3. **Deploy on Vercel**
    - Connect your GitHub repository to Vercel
-   - Set environment variables in Vercel dashboard:
-     - `NEXT_PUBLIC_API_URL`: Your backend API URL
-     - `NEXT_PUBLIC_APP_URL`: Your frontend URL
+   - **Set environment variables in Vercel dashboard:**
+     1. Go to your project in Vercel dashboard
+     2. Navigate to **Settings > Environment Variables**
+     3. Add the following variables for **Production**, **Preview**, and **Development**:
+        - `NEXT_PUBLIC_API_URL`: `https://your-backend-api.vercel.app/api`
+        - `NEXT_PUBLIC_APP_URL`: `https://your-app-name.vercel.app`
    - Deploy automatically on push
+
+### Setting Environment Variables in Vercel
+
+1. **In Vercel Dashboard:**
+   - Project Settings → Environment Variables
+   - Add each variable for all environments (Production, Preview, Development)
+
+2. **Required Variables:**
+   ```
+   NEXT_PUBLIC_API_URL=https://your-backend-api.vercel.app/api
+   NEXT_PUBLIC_APP_URL=https://your-app-name.vercel.app
+   ```
+
+3. **Important Notes:**
+   - Don't use `@secret` references in `vercel.json` unless you've created those secrets
+   - Environment variables starting with `NEXT_PUBLIC_` are exposed to the browser
+   - Set variables for all environments to ensure consistent behavior
 
 ### Important Deployment Notes
 
