@@ -22,6 +22,7 @@ export interface Course {
   instructor: User
   category: string
   difficulty: 'beginner' | 'intermediate' | 'advanced'
+  level?: 'beginner' | 'intermediate' | 'advanced' // Some components use level instead of difficulty
   status: 'draft' | 'published' | 'archived'
   price: number
   duration: number
@@ -88,6 +89,7 @@ export interface AuthResponse {
   data?: {
     user: User
     accessToken: string
+    token?: string  // Alternative token name
     refreshToken?: string
   }
   // Direct response format options (for backwards compatibility)
@@ -121,6 +123,7 @@ export interface RegisterCredentials {
   email: string
   password: string
   role: 'student' | 'instructor'
+  username?: string // Optional username field
 }
 
 export interface CreateCourseData {
@@ -132,7 +135,11 @@ export interface CreateCourseData {
   duration: number
   thumbnail?: string
   tags: string[]
-  prerequisites: string[]
-  learningOutcomes: string[]
+  prerequisites: string[] // Legacy field name 
+  requirements: string[]  // New field name
+  learningOutcomes: string[] // Legacy field name
+  objectives: string[]    // New field name
   isPublished?: boolean
+  language?: string       // Required field with default in backend
+  status?: 'draft' | 'published' | 'archived'
 }

@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Course, User } from '@/types';
-import { courseService } from '@/services/courseService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -19,8 +18,6 @@ import {
   DollarSign,
   Clock,
   BookOpen,
-  BarChart3,
-  Settings,
   Eye
 } from 'lucide-react';
 import Link from 'next/link';
@@ -45,7 +42,10 @@ interface EnrolledStudent {
   enrollmentDate: string;
   progress: {
     percentage: number;
-    completedLessons: any[];
+    completedLessons: Array<{
+      lessonId: string;
+      completedAt: Date;
+    }>;
   };
   status: string;
 }
@@ -61,11 +61,9 @@ export default function InstructorCoursesPage() {
 function InstructorCoursesContent() {
   const { user } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [viewingStudents, setViewingStudents] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -83,11 +81,7 @@ function InstructorCoursesContent() {
     status: 'draft'
   });
 
-  useEffect(() => {
-    fetchInstructorCourses();
-  }, []);
-
-  const fetchInstructorCourses = async () => {
+  const fetchInstructorCourses = useCallback(async () => {
     try {
       setLoading(true);
       // Get courses for the current instructor
@@ -98,13 +92,17 @@ function InstructorCoursesContent() {
       if (response.data.success) {
         setCourses(response.data.data.courses || response.data.data || []);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError('Failed to fetch courses');
       console.error('Error fetching courses:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?._id]);
+
+  useEffect(() => {
+    fetchInstructorCourses();
+  }, [fetchInstructorCourses]);
 
   const fetchEnrolledStudents = async (courseId: string) => {
     try {
@@ -116,7 +114,7 @@ function InstructorCoursesContent() {
       if (response.data.success) {
         setEnrolledStudents(response.data.data.enrollments || response.data.data || []);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError('Failed to fetch enrolled students');
       console.error('Error fetching students:', err);
     }
@@ -160,8 +158,9 @@ function InstructorCoursesContent() {
         fetchInstructorCourses();
         setCreating(false);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to create course');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create course';
+      setError(errorMessage);
     } finally {
       setCreating(false);
     }
@@ -174,11 +173,10 @@ function InstructorCoursesContent() {
       if (response.data.success) {
         setSuccess('Course updated successfully!');
         fetchInstructorCourses();
-        setEditing(false);
-        setSelectedCourse(null);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to update course');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update course';
+      setError(errorMessage);
     }
   };
 
@@ -192,8 +190,9 @@ function InstructorCoursesContent() {
         setSuccess('Course deleted successfully!');
         fetchInstructorCourses();
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to delete course');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete course';
+      setError(errorMessage);
     }
   };
 
@@ -308,6 +307,7 @@ function InstructorCoursesContent() {
                     onChange={(e) => setFormData({...formData, difficulty: e.target.value as 'beginner' | 'intermediate' | 'advanced'})}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
+                    aria-label="Course difficulty level"
                   >
                     <option value="">Select difficulty</option>
                     <option value="beginner">Beginner</option>
@@ -372,8 +372,8 @@ function InstructorCoursesContent() {
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setSelectedCourse(course);
-                      setEditing(true);
+                      // TODO: Implement edit functionality
+                      console.log('Edit course:', course._id);
                     }}
                   >
                     <Edit3 className="h-4 w-4" />

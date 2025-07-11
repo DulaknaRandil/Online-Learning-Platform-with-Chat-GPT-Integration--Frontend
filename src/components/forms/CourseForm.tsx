@@ -251,8 +251,9 @@ export default function CourseForm({
           {/* Category and Difficulty */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <label className="block text-sm font-medium mb-2">Category</label>
+              <label htmlFor="category" className="block text-sm font-medium mb-2">Category</label>
               <select
+                id="category"
                 value={formData.category}
                 onChange={(e) => handleInputChange('category', e.target.value)}
                 className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -269,8 +270,9 @@ export default function CourseForm({
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">Difficulty Level</label>
+              <label htmlFor="difficulty" className="block text-sm font-medium mb-2">Difficulty Level</label>
               <select
+                id="difficulty"
                 value={formData.difficulty}
                 onChange={(e) => handleInputChange('difficulty', e.target.value)}
                 className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -306,10 +308,10 @@ export default function CourseForm({
             </div>
           </div>
 
-          {/* Language */}
           <div>
-            <label className="block text-sm font-medium mb-2">Language</label>
+            <label htmlFor="language" className="block text-sm font-medium mb-2">Language</label>
             <select
+              id="language"
               value={formData.language}
               onChange={(e) => handleInputChange('language', e.target.value)}
               className="w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -354,6 +356,7 @@ export default function CourseForm({
                     type="button"
                     onClick={() => removePrerequisite(index)}
                     className="ml-1 text-red-500 hover:text-red-700"
+                    aria-label={`Remove prerequisite: ${prerequisite}`}
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -385,6 +388,7 @@ export default function CourseForm({
                     type="button"
                     onClick={() => removeObjective(index)}
                     className="text-red-500 hover:text-red-700"
+                    aria-label={`Remove objective: ${objective}`}
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -419,6 +423,7 @@ export default function CourseForm({
                     type="button"
                     onClick={() => removeTag(index)}
                     className="ml-1 text-red-500 hover:text-red-700"
+                    aria-label={`Remove tag: ${tag}`}
                   >
                     <X className="h-3 w-3" />
                   </button>

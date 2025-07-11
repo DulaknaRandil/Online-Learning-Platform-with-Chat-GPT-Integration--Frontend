@@ -9,7 +9,6 @@ import { enrollmentService } from '@/services/enrollmentService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { 
   ArrowLeft, 
   Clock, 
@@ -19,14 +18,10 @@ import {
   CheckCircle,
   Play,
   Download,
-  DollarSign,
-  Award,
-  Target,
-  Calendar,
-  User
+  DollarSign
 } from 'lucide-react';
 import Link from 'next/link';
-import api from '@/lib/api';
+import PaymentGateway from '@/components/payment/PaymentGateway';
 
 export default function CourseDetail() {
   const { id } = useParams();
@@ -37,12 +32,35 @@ export default function CourseDetail() {
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [loading, setLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
+  const [showPaymentGateway, setShowPaymentGateway] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchCourse = useCallback(async () => {
     try {
       setLoading(true);
-      const courseData = await courseService.getCourse(id as string);
+      let courseData: Course | null = null;
+
+      // Try direct view method first
+      try {
+        console.log('Attempting direct view method for course:', id);
+        const directResult = await courseService.directViewCourse(id as string);
+        if (directResult && typeof directResult === 'object' && 'data' in directResult) {
+          console.log('Direct view method successful');
+          const data = (directResult as { data: unknown }).data;
+          if (data && typeof data === 'object') {
+            courseData = data as Course;
+          }
+        }
+      } catch (directError) {
+        console.error('Direct view method failed, falling back to standard method:', directError);
+      }
+
+      // If direct method failed, try standard method
+      if (!courseData) {
+        console.log('Using standard getCourse method');
+        courseData = await courseService.getCourse(id as string);
+      }
+
       setCourse(courseData);
     } catch (err) {
       setError('Failed to fetch course details');
@@ -81,15 +99,50 @@ export default function CourseDetail() {
       return;
     }
 
+    // Show payment gateway for paid courses, enroll directly for free courses
+    if (course.price > 0) {
+      setShowPaymentGateway(true);
+    } else {
+      // Free course - direct enrollment
+      setEnrolling(true);
+      setError(null);
+
+      try {
+        await enrollmentService.enroll(course._id);
+        await checkEnrollment();
+      } catch (err: unknown) {
+        const error = err as { response?: { data?: { message?: string } } };
+        setError(error.response?.data?.message || 'Failed to enroll in course');
+      } finally {
+        setEnrolling(false);
+      }
+    }
+  };
+  
+  // Define PaymentDetails type inline
+  interface PaymentDetails {
+    paymentMethod: string;
+    amount: number;
+    currency: string;
+    transactionId: string;
+    paidAt: string;
+    last4?: string;
+  }
+  
+  const handlePaymentComplete = async (paymentDetails: PaymentDetails) => {
+    if (!course) return;
+    
     setEnrolling(true);
     setError(null);
-
+    
     try {
-      await enrollmentService.enroll(course._id);
+      // Pass payment details to the enrollment service
+      await enrollmentService.enroll(course._id, paymentDetails as unknown as Record<string, unknown>);
+      setShowPaymentGateway(false);
       await checkEnrollment();
     } catch (err: unknown) {
       const error = err as { response?: { data?: { message?: string } } };
-      setError(error.response?.data?.message || 'Failed to enroll in course');
+      setError(error.response?.data?.message || 'Failed to process enrollment');
     } finally {
       setEnrolling(false);
     }
@@ -142,6 +195,31 @@ export default function CourseDetail() {
 
   return (
     <div className="container mx-auto px-4 py-8">
+      {/* Payment Gateway Modal */}
+      {showPaymentGateway && course && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b">
+              <h2 className="text-xl font-semibold">Complete Enrollment</h2>
+              <button 
+                onClick={() => setShowPaymentGateway(false)}
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+              >
+                &times;
+              </button>
+            </div>
+            <div className="p-4">
+              <PaymentGateway 
+                coursePrice={course.price} 
+                courseName={course.title}
+                onPaymentComplete={handlePaymentComplete}
+                onCancel={() => setShowPaymentGateway(false)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <Link href="/courses">
@@ -154,22 +232,22 @@ export default function CourseDetail() {
         {user && (
           <div className="flex gap-2">
             {/* Instructor actions */}
-            {course.instructor._id === user._id && (
+            {course.instructor?._id === user._id && (
               <>
                 <Link href={`/instructor/courses/edit/${course._id}`}>
                   <Button variant="outline">Edit Course</Button>
                 </Link>
                 <Button 
-                  variant={course.isPublished ? "secondary" : "default"}
+                  variant={course.status === 'published' ? "secondary" : "default"}
                   onClick={() => courseService.togglePublish(course._id)}
                 >
-                  {course.isPublished ? 'Unpublish' : 'Publish'}
+                  {course.status === 'published' ? 'Unpublish' : 'Publish'}
                 </Button>
               </>
             )}
             
             {/* Admin actions */}
-            {user.role === 'admin' && course.instructor._id !== user._id && (
+            {user.role === 'admin' && course.instructor?._id !== user._id && (
               <>
                 <Button 
                   variant="outline"
@@ -177,7 +255,7 @@ export default function CourseDetail() {
                 >
                   Admin Edit
                 </Button>
-                {!course.isPublished && (
+                {course.status !== 'published' && (
                   <Button 
                     variant="secondary"
                     onClick={() => courseService.togglePublish(course._id)}
@@ -199,7 +277,7 @@ export default function CourseDetail() {
             <div className="flex items-center gap-2 mb-4">
               <Badge variant="secondary">{course.category}</Badge>
               <Badge variant="outline">{course.level}</Badge>
-              {course.isPublished && <Badge variant="default">Published</Badge>}
+              {course.status === 'published' && <Badge variant="default">Published</Badge>}
             </div>
             
             <h1 className="text-3xl font-bold text-gray-900 mb-4">{course.title}</h1>
@@ -215,7 +293,12 @@ export default function CourseDetail() {
               </div>
               <div className="flex items-center gap-1">
                 <Star className="h-4 w-4" />
-                <span>{course.rating.average.toFixed(1)} ({course.rating.count} reviews)</span>
+                <span>
+                  {course.rating?.average 
+                    ? `${course.rating.average.toFixed(1)} (${course.rating.count || 0} reviews)`
+                    : 'No ratings yet'
+                  }
+                </span>
               </div>
             </div>
 
@@ -231,21 +314,21 @@ export default function CourseDetail() {
               <div className="flex items-center gap-4">
                 <div className="h-12 w-12 bg-gray-200 rounded-full flex items-center justify-center">
                   <span className="text-lg font-semibold">
-                    {course.instructor.username[0]}
+                    {course.instructor?.username?.[0] || 'I'}
                   </span>
                 </div>
                 <div>
                   <h3 className="font-semibold">
-                    {course.instructor.username}
+                    {course.instructor?.username || 'Unknown Instructor'}
                   </h3>
-                  <p className="text-gray-600">{course.instructor.bio || 'Experienced educator'}</p>
+                  <p className="text-gray-600">{course.instructor?.bio || 'Experienced educator'}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* What You'll Learn */}
-          {course.learningOutcomes.length > 0 && (
+          {course.learningOutcomes && course.learningOutcomes.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>What You&apos;ll Learn</CardTitle>
@@ -264,7 +347,7 @@ export default function CourseDetail() {
           )}
 
           {/* Prerequisites */}
-          {course.prerequisites.length > 0 && (
+          {course.prerequisites && course.prerequisites.length > 0 && (
             <Card>
               <CardHeader>
                 <CardTitle>Prerequisites</CardTitle>
@@ -288,7 +371,7 @@ export default function CourseDetail() {
               <CardTitle>Course Content</CardTitle>
             </CardHeader>
             <CardContent>
-              {course.lessons.length > 0 ? (
+              {course.lessons && course.lessons.length > 0 ? (
                 <div className="space-y-3">
                   {course.lessons.map((lesson, index) => (
                     <div key={lesson._id} className="flex items-center justify-between p-3 border rounded-lg">
@@ -308,7 +391,7 @@ export default function CourseDetail() {
                               <Play className="h-4 w-4" />
                             </Button>
                           )}
-                          {lesson.resources.length > 0 && (
+                          {lesson.resources && lesson.resources.length > 0 && (
                             <Button size="sm" variant="outline">
                               <Download className="h-4 w-4" />
                             </Button>
@@ -325,7 +408,7 @@ export default function CourseDetail() {
           </Card>
 
           {/* Tags */}
-          {course.tags.length > 0 && (
+          {course.tags && course.tags.length > 0 && (
             <div>
               <h3 className="font-semibold mb-3">Tags</h3>
               <div className="flex flex-wrap gap-2">
@@ -427,7 +510,7 @@ export default function CourseDetail() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Lessons</span>
-                <span className="font-medium">{course.lessons.length}</span>
+                <span className="font-medium">{course.lessons ? course.lessons.length : 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Duration</span>
@@ -439,7 +522,12 @@ export default function CourseDetail() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Rating</span>
-                <span className="font-medium">{course.rating.average.toFixed(1)}/5</span>
+                <span className="font-medium">
+                  {course.rating?.average 
+                    ? `${course.rating.average.toFixed(1)}/5`
+                    : 'Not rated'
+                  }
+                </span>
               </div>
             </CardContent>
           </Card>

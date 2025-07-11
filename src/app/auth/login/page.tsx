@@ -68,7 +68,7 @@ export default function Login() {
         endpoint: `/auth/login`
       });
       
-      // Note: test accounts use password123
+      // Note: test accounts use specific passwords (Admin123!, Teach123!, Learn123!)
       await login({ email, password })
       console.log('Login successful, redirecting...');
       router.push('/')
@@ -85,7 +85,7 @@ export default function Login() {
         }
         // Enhance error messages for better UX
         else if (errorMsg.includes('Invalid credentials')) {
-          errorMsg = 'Invalid email or password. Please try again. Remember: test accounts use password123';
+          errorMsg = 'Invalid email or password. Please try again.';
         } else if (errorMsg.includes('locked')) {
           errorMsg = 'Your account is temporarily locked due to too many failed attempts. Please try again later.';
         }
@@ -128,15 +128,6 @@ export default function Login() {
                   <div className="text-sm text-red-800 font-medium">{error}</div>
                 </div>
               )}
-              
-              <div className="bg-blue-50 backdrop-blur-sm border border-blue-200 rounded-xl p-4">
-                <div className="text-sm text-blue-800">
-                  <p className="font-medium mb-2">Test Accounts:</p>
-                  <p><span className="font-medium">Student:</span> student@example.com / password123</p>
-                  <p><span className="font-medium">Instructor:</span> instructor@example.com / password123</p>
-                  <p><span className="font-medium">Admin:</span> admin@example.com / password123</p>
-                </div>
-              </div>
               
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">

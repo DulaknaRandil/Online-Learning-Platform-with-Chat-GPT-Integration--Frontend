@@ -1,12 +1,13 @@
 import axios from 'axios'
 
-// Log the environment variable for debugging
-console.log('API URL from env:', process.env.NEXT_PUBLIC_API_URL);
-
+// Get API URL from environment
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
 
-// Log what we're actually using
-console.log('Using API URL:', API_URL);
+// Only log in development
+if (process.env.NODE_ENV === 'development') {
+  console.log('API URL from env:', process.env.NEXT_PUBLIC_API_URL);
+  console.log('Using API URL:', API_URL);
+}
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -21,9 +22,44 @@ api.interceptors.request.use(
   (config) => {
     console.log('API request to:', config.url, 'with baseURL:', config.baseURL);
     
+    // Log request data for debugging
+    if (config.method === 'post' || config.method === 'put') {
+      console.log('Request data:', config.data);
+      
+      // If we're creating a course, add extra logs
+      if (config.url?.includes('/courses')) {
+        console.log('COURSE REQUEST - Detailed data analysis:');
+        try {
+          const data = JSON.parse(JSON.stringify(config.data));
+          
+          // Check for required fields
+          const requiredFields = ['title', 'description', 'category', 'difficulty', 'language', 'duration'];
+          const missingFields = requiredFields.filter(field => !data[field]);
+          if (missingFields.length > 0) {
+            console.warn('Missing required fields:', missingFields);
+          }
+          
+          // Check data types
+          Object.keys(data).forEach(key => {
+            console.log(`Field: ${key}, Type: ${typeof data[key]}, Value:`, 
+              Array.isArray(data[key]) ? `Array[${data[key].length}]` : data[key]);
+          });
+        } catch (err) {
+          console.error('Error parsing request data:', err);
+        }
+      }
+    }
+    
     const token = localStorage.getItem('authToken')
     if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+      // Make sure the Authorization header is properly set with Bearer prefix
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+      
+      // Log token for debugging (masked for security)
+      console.log(`Token present: ${token.substring(0, 10)}...`);
+    } else {
+      console.log('No auth token available for request');
     }
     return config
   },
@@ -35,15 +71,27 @@ api.interceptors.request.use(
 
 // Response interceptor to handle errors
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Log detailed success responses for direct endpoints
+    if (response.config.url?.includes('direct-')) {
+      console.log(`✅ DIRECT API SUCCESS [${response.config.method?.toUpperCase()}] ${response.config.url}:`, {
+        status: response.status,
+        data: response.data,
+        headers: response.headers
+      });
+    }
+    return response;
+  },
   (error) => {
-    // Log the full error for debugging
-    console.error('API Error Details:', {
+    // Enhanced error logging - especially for direct endpoints
+    const isDirectEndpoint = error.config?.url?.includes('direct-');
+    
+    console.error(`❌ API ${isDirectEndpoint ? 'DIRECT ' : ''}ERROR [${error.config?.method?.toUpperCase() || 'UNKNOWN'}] ${error.config?.url || 'unknown'}:`, {
       status: error.response?.status,
+      statusText: error.response?.statusText,
       data: error.response?.data,
       message: error.message,
-      url: error.config?.url,
-      method: error.config?.method
+      stack: isDirectEndpoint ? error.stack : undefined
     });
     
     // Handle specific error cases
@@ -116,12 +164,30 @@ api.interceptors.response.use(
       }
     } else if (error.request) {
       // Request made but no response received
-      console.error('Network Error:', error.request)
-      return Promise.reject(new Error('Network error. Please check your connection and try again.'))
+      console.error('Network Error:', error.request);
+      
+      // Check if we have a connection to the server
+      const checkServerHealth = async () => {
+        try {
+          await fetch(`${API_URL}/health`);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      
+      // If server health check fails, the server might be down
+      checkServerHealth().then(isServerUp => {
+        if (!isServerUp) {
+          console.error('Backend server appears to be down');
+        }
+      });
+      
+      return Promise.reject(new Error('Network error. Please check your connection and try again.'));
     } else {
       // Error in setting up the request
-      console.error('Request Error:', error.message)
-      return Promise.reject(new Error(error.message || 'Request setup error'))
+      console.error('Request Error:', error.message);
+      return Promise.reject(new Error(error.message || 'Request setup error'));
     }
   }
 )

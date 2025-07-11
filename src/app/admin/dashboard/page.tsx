@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 import { User, Course } from '@/types';
 import { courseService } from '@/services/courseService';
-import api from '@/lib/api';
+import { adminService, AdminDashboardStats } from '@/services/adminService';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,6 +26,7 @@ import Link from 'next/link';
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   
   const [users, setUsers] = useState<User[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -34,34 +36,41 @@ export default function AdminDashboard() {
   const [courseSearchTerm, setCourseSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'courses'>('overview');
   const [loading, setLoading] = useState(true);
+  const [operationLoading, setOperationLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [stats, setStats] = useState<AdminDashboardStats | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [coursesData] = await Promise.all([
-        courseService.getCourses()
-      ]);
       
-      setCourses(coursesData.data);
-      setFilteredCourses(coursesData.data);
+      console.log('AdminDashboard: Starting to fetch data...');
       
-      // Get real users from API
+      // Get all courses using the admin service
+      console.log('AdminDashboard: Fetching courses...');
+      const coursesData = await adminService.getAllCourses();
+      console.log('AdminDashboard: Courses received:', coursesData);
+      setCourses(coursesData);
+      setFilteredCourses(coursesData);
+      
+      // Get all users using the admin service
+      console.log('AdminDashboard: Fetching users...');
+      const usersData = await adminService.getAllUsers();
+      console.log('AdminDashboard: Users received:', usersData);
+      setUsers(usersData);
+      setFilteredUsers(usersData);
+      
+      // Get dashboard statistics
       try {
-        const usersResponse = await api.get('/users');
-        if (usersResponse.data && usersResponse.data.data) {
-          const realUsers = usersResponse.data.data;
-          setUsers(realUsers);
-          setFilteredUsers(realUsers);
-        } else {
-          console.error('Invalid users API response format');
-          setUsers([]);
-          setFilteredUsers([]);
+        console.log('AdminDashboard: Fetching dashboard stats...');
+        const dashboardStats = await adminService.getDashboardStats();
+        if (dashboardStats) {
+          setStats(dashboardStats);
+          console.log('Admin dashboard stats:', dashboardStats);
         }
-      } catch (usersError) {
-        console.error('Failed to fetch users:', usersError);
-        setUsers([]);
-        setFilteredUsers([]);
+      } catch (statsError) {
+        console.error('Failed to fetch dashboard stats:', statsError);
       }
     } catch (err) {
       setError('Failed to fetch data');
@@ -94,80 +103,198 @@ export default function AdminDashboard() {
   }, [fetchData, user]);
 
   useEffect(() => {
-    const filtered = users.filter(user =>
-      (user.username?.toLowerCase().includes(userSearchTerm.toLowerCase()) || '') ||
-      user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
-    );
-    setFilteredUsers(filtered);
+    // Make sure users array exists before filtering
+    if (users && Array.isArray(users)) {
+      const filtered = users.filter(user =>
+        (user.username?.toLowerCase().includes(userSearchTerm.toLowerCase()) || '') ||
+        user.email.toLowerCase().includes(userSearchTerm.toLowerCase())
+      );
+      setFilteredUsers(filtered);
+    }
   }, [users, userSearchTerm]);
 
   useEffect(() => {
-    const filtered = courses.filter(course =>
-      course.title.toLowerCase().includes(courseSearchTerm.toLowerCase()) ||
-      course.category.toLowerCase().includes(courseSearchTerm.toLowerCase())
-    );
-    setFilteredCourses(filtered);
+    // Make sure courses array exists before filtering
+    if (courses && Array.isArray(courses)) {
+      const filtered = courses.filter(course =>
+        course.title.toLowerCase().includes(courseSearchTerm.toLowerCase()) ||
+        course.category.toLowerCase().includes(courseSearchTerm.toLowerCase())
+      );
+      setFilteredCourses(filtered);
+    }
   }, [courses, courseSearchTerm]);
 
   const handleToggleUserStatus = async (userId: string, isActive: boolean) => {
+    const operationId = `user-toggle-${userId}`;
+    setOperationLoading(operationId);
+    
     try {
-      // This would typically be an API call
-      setUsers(users.map(user => 
-        user._id === userId ? { ...user, isActive: !isActive } : user
-      ));
+      // Call the admin service to toggle user status
+      await adminService.toggleUserStatus(userId);
+      
+      // Update local state
+      if (users && Array.isArray(users)) {
+        setUsers(users.map(user => 
+          user._id === userId ? { ...user, isActive: !isActive } : user
+        ));
+      }
+      
+      toast.success(
+        'User status updated',
+        `User has been ${!isActive ? 'activated' : 'deactivated'} successfully`
+      );
     } catch (err) {
       console.error('Error toggling user status:', err);
+      toast.error(
+        'Failed to update user status',
+        'Please try again later'
+      );
+    } finally {
+      setOperationLoading(null);
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user?')) return;
+    // Use a more user-friendly confirmation
+    const userToDelete = users.find(u => u._id === userId);
+    const userName = userToDelete?.username || userToDelete?.email || 'this user';
+    
+    if (!confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) return;
+    
+    const operationId = `user-delete-${userId}`;
+    setOperationLoading(operationId);
     
     try {
-      // This would typically be an API call
-      setUsers(users.filter(user => user._id !== userId));
+      // Call the admin service to delete the user
+      await adminService.deleteUser(userId);
+      
+      // Update local state
+      if (users && Array.isArray(users)) {
+        setUsers(users.filter(user => user._id !== userId));
+      }
+      
+      toast.success(
+        'User deleted',
+        `${userName} has been deleted successfully`
+      );
     } catch (err) {
       console.error('Error deleting user:', err);
+      toast.error(
+        'Failed to delete user',
+        'Please try again later'
+      );
+    } finally {
+      setOperationLoading(null);
     }
   };
 
   const handleDeleteCourse = async (courseId: string) => {
-    if (!confirm('Are you sure you want to delete this course?')) return;
+    const courseToDelete = courses.find(c => c._id === courseId);
+    const courseName = courseToDelete?.title || 'this course';
+    
+    if (!confirm(`Are you sure you want to delete "${courseName}"? This action cannot be undone.`)) return;
+    
+    const operationId = `course-delete-${courseId}`;
+    setOperationLoading(operationId);
     
     try {
-      await courseService.deleteCourse(courseId);
-      setCourses(courses.filter(course => course._id !== courseId));
+      await adminService.deleteCourse(courseId);
+      if (courses && Array.isArray(courses)) {
+        setCourses(courses.filter(course => course._id !== courseId));
+      }
+      
+      toast.success(
+        'Course deleted',
+        `"${courseName}" has been deleted successfully`
+      );
     } catch (err) {
       console.error('Error deleting course:', err);
+      toast.error(
+        'Failed to delete course',
+        'Please try again later'
+      );
+    } finally {
+      setOperationLoading(null);
     }
   };
 
   const handleToggleCourseStatus = async (courseId: string) => {
+    const operationId = `course-toggle-${courseId}`;
+    setOperationLoading(operationId);
+    
     try {
-      await courseService.togglePublish(courseId);
-      setCourses(courses.map(course => 
-        course._id === courseId ? { ...course, isPublished: !course.isPublished } : course
-      ));
+      const course = courses.find(c => c._id === courseId);
+      const currentStatus = course?.status;
+      
+      // Use the new toggleCourseStatus method instead of togglePublish
+      await courseService.toggleCourseStatus(courseId);
+      
+      if (courses && Array.isArray(courses)) {
+        setCourses(courses.map(course => 
+          course._id === courseId ? { 
+            ...course, 
+            status: course.status === 'published' ? 'draft' : 'published' 
+          } : course
+        ));
+      }
+      
+      const newStatus = currentStatus === 'published' ? 'unpublished' : 'published';
+      toast.success(
+        'Course status updated',
+        `Course has been ${newStatus} successfully`
+      );
     } catch (err) {
       console.error('Error toggling course status:', err);
+      toast.error(
+        'Failed to update course status',
+        'Please try again later'
+      );
+    } finally {
+      setOperationLoading(null);
     }
   };
 
-  const getStats = () => {
-    const totalUsers = users.length;
-    const activeUsers = users.filter(user => user.isActive).length;
-    const totalCourses = courses.length;
-    const publishedCourses = courses.filter(course => course.isPublished).length;
-    const totalStudents = users.filter(user => user.role === 'student').length;
-    const totalInstructors = users.filter(user => user.role === 'instructor').length;
+  // Calculate stats from local data if the backend stats are not available
+  const calculateLocalStats = () => {
+    // Ensure users and courses are arrays before attempting to filter
+    const usersArray = Array.isArray(users) ? users : [];
+    const coursesArray = Array.isArray(courses) ? courses : [];
+    
+    const totalUsers = usersArray.length;
+    const activeUsers = usersArray.filter(user => user.isActive)?.length || 0;
+    const totalCourses = coursesArray.length;
+    const publishedCourses = coursesArray.filter(course => course.status === 'published')?.length || 0;
+    const totalStudents = usersArray.filter(user => user.role === 'student')?.length || 0;
+    const totalInstructors = usersArray.filter(user => user.role === 'instructor')?.length || 0;
 
     return {
-      totalUsers,
-      activeUsers,
-      totalCourses,
-      publishedCourses,
-      totalStudents,
-      totalInstructors
+      users: {
+        totalUsers,
+        activeUsers: activeUsers,
+        inactiveUsers: totalUsers - activeUsers,
+        studentCount: totalStudents,
+        instructorCount: totalInstructors,
+        adminCount: usersArray.filter(user => user.role === 'admin')?.length || 0,
+        recentRegistrations: 0
+      },
+      courses: {
+        totalCourses,
+        publishedCourses,
+        draftCourses: coursesArray.filter(course => course.status === 'draft')?.length || 0,
+        archivedCourses: 0,
+        categories: [],
+        popularCourses: [],
+        recentCourses: 0
+      },
+      enrollments: {
+        totalEnrollments: 0,
+        activeEnrollments: 0,
+        completedEnrollments: 0,
+        droppedEnrollments: 0,
+        recentEnrollments: 0,
+        enrollmentTrend: [],
+        paymentMethods: []
+      }
     };
   };
 
@@ -205,7 +332,8 @@ export default function AdminDashboard() {
     );
   }
 
-  const stats = getStats();
+  // Use backend stats if available, otherwise calculate from local data
+  const displayStats = stats || calculateLocalStats();
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -242,7 +370,7 @@ export default function AdminDashboard() {
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          Users ({users.length})
+          Users ({Array.isArray(users) ? users.length : 0})
         </button>
         <button
           onClick={() => setActiveTab('courses')}
@@ -252,7 +380,7 @@ export default function AdminDashboard() {
               : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          Courses ({courses.length})
+          Courses ({Array.isArray(courses) ? courses.length : 0})
         </button>
       </div>
 
@@ -266,7 +394,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Total Users</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+                    <p className="text-2xl font-bold text-gray-900">{displayStats?.users?.totalUsers || 0}</p>
                   </div>
                   <Users className="h-8 w-8 text-blue-500" />
                 </div>
@@ -278,7 +406,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Active Users</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.activeUsers}</p>
+                    <p className="text-2xl font-bold text-gray-900">{displayStats?.users?.activeUsers || 0}</p>
                   </div>
                   <UserCheck className="h-8 w-8 text-green-500" />
                 </div>
@@ -290,7 +418,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Total Courses</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalCourses}</p>
+                    <p className="text-2xl font-bold text-gray-900">{displayStats?.courses?.totalCourses || 0}</p>
                   </div>
                   <BookOpen className="h-8 w-8 text-purple-500" />
                 </div>
@@ -302,7 +430,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Published</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.publishedCourses}</p>
+                    <p className="text-2xl font-bold text-gray-900">{displayStats?.courses?.publishedCourses || 0}</p>
                   </div>
                   <CheckCircle className="h-8 w-8 text-green-500" />
                 </div>
@@ -314,7 +442,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Students</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalStudents}</p>
+                    <p className="text-2xl font-bold text-gray-900">{displayStats?.users?.studentCount || 0}</p>
                   </div>
                   <Users className="h-8 w-8 text-indigo-500" />
                 </div>
@@ -326,7 +454,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-gray-600">Instructors</p>
-                    <p className="text-2xl font-bold text-gray-900">{stats.totalInstructors}</p>
+                    <p className="text-2xl font-bold text-gray-900">{displayStats?.users?.instructorCount || 0}</p>
                   </div>
                   <TrendingUp className="h-8 w-8 text-orange-500" />
                 </div>
@@ -342,7 +470,7 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {users.slice(0, 5).map((user) => (
+                  {Array.isArray(users) ? users.slice(0, 5).map((user) => (
                     <div key={user._id} className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 bg-gray-200 rounded-full flex items-center justify-center">
@@ -359,7 +487,9 @@ export default function AdminDashboard() {
                         {user.role}
                       </Badge>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-center text-gray-500 py-4">No users found</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -370,17 +500,19 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {courses.slice(0, 5).map((course) => (
+                  {Array.isArray(courses) ? courses.slice(0, 5).map((course) => (
                     <div key={course._id} className="flex items-center justify-between">
                       <div>
                         <p className="font-medium text-sm">{course.title}</p>
                         <p className="text-xs text-gray-500">{course.category}</p>
                       </div>
-                      <Badge variant={course.isPublished ? 'default' : 'secondary'}>
-                        {course.isPublished ? 'Published' : 'Draft'}
+                      <Badge variant={course.status === 'published' ? 'default' : 'secondary'}>
+                        {course.status === 'published' ? 'Published' : 'Draft'}
                       </Badge>
                     </div>
-                  ))}
+                  )) : (
+                    <p className="text-center text-gray-500 py-4">No courses found</p>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -417,7 +549,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredUsers.map((user) => (
+                    {Array.isArray(filteredUsers) ? filteredUsers.map((user) => (
                       <tr key={user._id} className="hover:bg-gray-50">
                         <td className="p-4">
                           <div className="flex items-center gap-3">
@@ -451,20 +583,36 @@ export default function AdminDashboard() {
                               size="sm"
                               variant="outline"
                               onClick={() => handleToggleUserStatus(user._id, user.isActive)}
+                              disabled={operationLoading === `user-toggle-${user._id}`}
                             >
-                              {user.isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                              {operationLoading === `user-toggle-${user._id}` ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                              ) : (
+                                user.isActive ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />
+                              )}
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleDeleteUser(user._id)}
+                              disabled={operationLoading === `user-delete-${user._id}`}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              {operationLoading === `user-delete-${user._id}` ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
                             </Button>
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )) : (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-gray-500">
+                          No users found
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -503,7 +651,7 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredCourses.map((course) => (
+                    {Array.isArray(filteredCourses) ? filteredCourses.map((course) => (
                       <tr key={course._id} className="hover:bg-gray-50">
                         <td className="p-4">
                           <div>
@@ -523,8 +671,8 @@ export default function AdminDashboard() {
                           <Badge variant="outline">{course.category}</Badge>
                         </td>
                         <td className="p-4">
-                          <Badge variant={course.isPublished ? 'default' : 'secondary'}>
-                            {course.isPublished ? 'Published' : 'Draft'}
+                          <Badge variant={course.status === 'published' ? 'default' : 'secondary'}>
+                            {course.status === 'published' ? 'Published' : 'Draft'}
                           </Badge>
                         </td>
                         <td className="p-4 text-sm text-gray-600">
@@ -541,20 +689,36 @@ export default function AdminDashboard() {
                               size="sm"
                               variant="outline"
                               onClick={() => handleToggleCourseStatus(course._id)}
+                              disabled={operationLoading === `course-toggle-${course._id}`}
                             >
-                              {course.isPublished ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                              {operationLoading === `course-toggle-${course._id}` ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                              ) : (
+                                course.status === 'published' ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />
+                              )}
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleDeleteCourse(course._id)}
+                              disabled={operationLoading === `course-delete-${course._id}`}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              {operationLoading === `course-delete-${course._id}` ? (
+                                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
                             </Button>
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )) : (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-gray-500">
+                          No courses found
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

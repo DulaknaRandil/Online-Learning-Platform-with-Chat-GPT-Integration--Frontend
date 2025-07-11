@@ -5,6 +5,26 @@ const nextConfig = {
   },
   images: {
     domains: ['localhost', 'via.placeholder.com', 'images.unsplash.com'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
+  },
+  // Configure external packages for server components
+  serverExternalPackages: ['mongoose'],
+  // Webpack configuration for better bundle optimization
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+        net: false,
+        tls: false,
+      };
+    }
+    return config;
   },
 }
 

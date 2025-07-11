@@ -63,8 +63,8 @@ export default function GPTChatComponent() {
         timestamp: new Date()
       }]);
 
-      const response = await api.post('/recommendations/gpt-recommendations', {
-        prompt: prompt.trim()
+      const response = await api.post('/recommendations/chat', {
+        query: prompt.trim()
       });
 
       if (response.data.success) {
@@ -79,8 +79,9 @@ export default function GPTChatComponent() {
       } else {
         setError(response.data.message || 'Failed to get recommendations');
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to get recommendations');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to get recommendations';
+      setError(errorMessage);
     } finally {
       setLoading(false);
       setPrompt('');
@@ -117,7 +118,7 @@ export default function GPTChatComponent() {
             AI Course Advisor
           </CardTitle>
           <p className="text-sm text-gray-600">
-            Ask me about your learning goals and I'll recommend the perfect courses for you!
+            Ask me about your learning goals and I&apos;ll recommend the perfect courses for you!
           </p>
         </CardHeader>
         <CardContent>

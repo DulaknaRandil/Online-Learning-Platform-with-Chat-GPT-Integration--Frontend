@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { BookOpen, Clock, Award, TrendingUp, PlayCircle, Sparkles, MessageCircle } from 'lucide-react'
+import { BookOpen, Clock, Award, TrendingUp, PlayCircle, Sparkles } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'

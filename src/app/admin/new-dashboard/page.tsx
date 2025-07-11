@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { User, Course, Enrollment } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,8 +39,6 @@ export default function AdminDashboardNew() {
 }
 
 function AdminDashboardContent() {
-  const { user } = useAuth();
-  
   const [users, setUsers] = useState<User[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
@@ -120,8 +117,8 @@ function AdminDashboardContent() {
 
       // Calculate stats
       const activeUsers = usersData.filter((u: User) => u.isActive).length;
-      const totalRevenue = enrollmentsData.reduce((sum: number, enrollment: any) => {
-        const course = coursesData.find((c: Course) => c._id === enrollment.course);
+      const totalRevenue = enrollmentsData.reduce((sum: number, enrollment: Enrollment) => {
+        const course = coursesData.find((c: Course) => c._id === enrollment.course._id);
         return sum + (course?.price || 0);
       }, 0);
 
@@ -133,7 +130,7 @@ function AdminDashboardContent() {
         revenue: totalRevenue
       });
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching admin data:', err);
       setError('Failed to fetch dashboard data');
     } finally {
@@ -164,8 +161,9 @@ function AdminDashboardContent() {
         setSuccess(`User ${action}d successfully`);
         fetchAllData();
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to ${action} user`);
+    } catch (err: unknown) {
+      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || `Failed to ${action} user`;
+      setError(errorMessage);
     }
   };
 
@@ -192,8 +190,9 @@ function AdminDashboardContent() {
         setSuccess(`Course ${action}d successfully`);
         fetchAllData();
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || `Failed to ${action} course`);
+    } catch (err: unknown) {
+      const errorMessage = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || `Failed to ${action} course`;
+      setError(errorMessage);
     }
   };
 
@@ -318,7 +317,7 @@ function AdminDashboardContent() {
           {['overview', 'users', 'courses', 'enrollments'].map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab as any)}
+              onClick={() => setActiveTab(tab as 'overview' | 'users' | 'courses' | 'enrollments')}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${
                 activeTab === tab
                   ? 'border-blue-500 text-blue-600'
@@ -507,8 +506,8 @@ function AdminDashboardContent() {
                         {course.enrollmentCount || 0}
                       </td>
                       <td className="border border-gray-300 px-4 py-2">
-                        <Badge className={course.isPublished ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                          {course.isPublished ? 'Published' : 'Draft'}
+                        <Badge className={course.status === 'published' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                          {course.status === 'published' ? 'Published' : 'Draft'}
                         </Badge>
                       </td>
                       <td className="border border-gray-300 px-4 py-2">
@@ -516,9 +515,9 @@ function AdminDashboardContent() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleCourseAction(course._id, course.isPublished ? 'reject' : 'approve')}
+                            onClick={() => handleCourseAction(course._id, course.status === 'published' ? 'reject' : 'approve')}
                           >
-                            {course.isPublished ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                            {course.status === 'published' ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
                           </Button>
                           <Button
                             size="sm"

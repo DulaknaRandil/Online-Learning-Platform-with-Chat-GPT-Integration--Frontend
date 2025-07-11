@@ -19,19 +19,42 @@ export default function InstructorDashboard() {
   const fetchInstructorCourses = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await courseService.getCourses();
-      // Filter courses created by the current instructor
-      const instructorCourses = response.data.filter(
-        (course: Course) => course.instructor._id === user?._id
-      );
-      setCourses(instructorCourses);
+      if (!user || !user._id) {
+        console.error('User or user ID is undefined');
+        return;
+      }
+      
+      // Use the proper endpoint for instructor courses
+      console.log('Fetching courses for instructor ID:', user._id);
+      const response = await courseService.getInstructorCourses(user._id);
+      
+      // Handle different response formats
+      if (Array.isArray(response)) {
+        setCourses(response);
+      } else if (response && Array.isArray(response.data)) {
+        setCourses(response.data);
+      } else if (response && typeof response === 'object' && 'data' in response) {
+        // Handle nested data structure
+        const data = (response as { data: unknown }).data;
+        if (Array.isArray(data)) {
+          setCourses(data);
+        } else if (data && typeof data === 'object' && 'courses' in data && Array.isArray((data as { courses: unknown[] }).courses)) {
+          setCourses((data as { courses: Course[] }).courses);
+        } else {
+          console.error('Unexpected data format inside response:', data);
+          setCourses([]);
+        }
+      } else {
+        console.error('Unexpected response format:', response);
+        setCourses([]);
+      }
     } catch (err) {
       setError('Failed to fetch courses');
       console.error('Error fetching courses:', err);
     } finally {
       setLoading(false);
     }
-  }, [user?._id]);
+  }, [user]);
 
   useEffect(() => {
     // Check if user is logged in and is an instructor
@@ -56,32 +79,165 @@ export default function InstructorDashboard() {
   }, [fetchInstructorCourses, user]);
 
   const handleDeleteCourse = async (courseId: string) => {
-    if (!confirm('Are you sure you want to delete this course?')) return;
+    if (!window.confirm('Are you sure you want to delete this course?')) return;
 
     try {
-      await courseService.deleteCourse(courseId);
-      setCourses(courses.filter(course => course._id !== courseId));
+      setLoading(true);
+      console.log('Attempting to delete course ID:', courseId);
+      
+      let success = false;
+      
+      // Try direct delete method first (most reliable)
+      try {
+        await courseService.directDeleteCourse(courseId);
+        success = true;
+        console.log('Direct delete succeeded');
+      } catch (directErr) {
+        console.error('Direct delete failed, trying emergency method:', directErr);
+        
+        try {
+          await courseService.emergencyDeleteCourse(courseId);
+          success = true;
+          console.log('Emergency delete succeeded');
+        } catch (emergencyErr) {
+          console.error('Emergency delete failed, trying standard method:', emergencyErr);
+          
+          try {
+            await courseService.deleteCourse(courseId);
+            success = true;
+            console.log('Standard delete succeeded');
+          } catch (standardErr) {
+            console.error('Standard delete failed:', standardErr);
+            throw standardErr; // Re-throw to be caught by outer catch
+          }
+        }
+      }
+      
+      if (success) {
+        // Update local state to remove the deleted course
+        setCourses(prevCourses => prevCourses.filter(course => course._id !== courseId));
+        
+        // Show success message
+        setError(null);
+        window.alert('Course deleted successfully');
+        
+        // Refresh the course list to ensure we have the latest data
+        fetchInstructorCourses();
+      }
     } catch (err) {
-      setError('Failed to delete course');
-      console.error('Error deleting course:', err);
+      console.error('All delete methods failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to delete course';
+      setError(errorMessage);
+      // Show error in alert for immediate feedback
+      window.alert(`Error: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleTogglePublish = async (courseId: string, isPublished: boolean) => {
+  const handleTogglePublish = async (courseId: string, status: string) => {
     try {
-      await courseService.updateCourse(courseId, { isPublished: !isPublished });
-      setCourses(courses.map(course => 
-        course._id === courseId ? { ...course, isPublished: !isPublished } : course
-      ));
+      setLoading(true);
+      console.log(`Attempting to toggle publish status for course ${courseId} (current status: ${status})`);
+      
+      let success = false;
+      let updatedCourse: { status?: string } | null = null;
+      
+      // Try direct method first (most reliable)
+      try {
+        const directResponse = await courseService.directTogglePublish(courseId);
+        success = true;
+        console.log('Direct toggle publish succeeded');
+        
+        if (directResponse && typeof directResponse === 'object' && 'data' in directResponse) {
+          const data = (directResponse as { data: unknown }).data;
+          if (data && typeof data === 'object' && 'status' in data) {
+            updatedCourse = data as { status?: string };
+          }
+        } else {
+          // Since we might not have complete course details, manually toggle the status
+          updatedCourse = { status: status === 'published' ? 'draft' : 'published' };
+        }
+      } catch (directErr) {
+        console.error('Direct toggle publish failed, trying emergency method:', directErr);
+        
+        try {
+          await courseService.emergencyTogglePublish(courseId);
+          success = true;
+          console.log('Emergency toggle publish succeeded');
+          // Since emergency doesn't return course details, we'll manually toggle the status
+          updatedCourse = { status: status === 'published' ? 'draft' : 'published' };
+        } catch (emergencyErr) {
+          console.error('Emergency toggle publish failed, trying standard method:', emergencyErr);
+          
+          // Fallback to standard method
+          try {
+            updatedCourse = await courseService.togglePublish(courseId);
+            success = true;
+            console.log('Standard toggle publish succeeded');
+          } catch (standardErr) {
+            console.error('Standard toggle publish failed:', standardErr);
+            throw standardErr; // Re-throw to be caught by outer catch
+          }
+        }
+      }
+      
+      if (success) {
+        // Refresh course list to ensure we have the latest data
+        fetchInstructorCourses();
+        
+        // Also update the UI immediately for better responsiveness
+        setCourses(prevCourses => prevCourses.map(course => {
+          if (course._id === courseId) {
+            // Determine the new status as a valid enum value
+            const newStatus: 'draft' | 'published' | 'archived' = 
+              (updatedCourse?.status === 'draft' || 
+               updatedCourse?.status === 'published' || 
+               updatedCourse?.status === 'archived') ? 
+                updatedCourse.status : 
+                (status === 'published' ? 'draft' : 'published');
+            
+            return { 
+              ...course,
+              status: newStatus
+            };
+          }
+          return course;
+        }));
+        
+        // Log the new status for debugging
+        const newStatus = updatedCourse?.status || (status === 'published' ? 'draft' : 'published');
+        console.log(`Course ${courseId} status changed to: ${newStatus}`);
+        
+        setError(null);
+        window.alert(`Course ${newStatus === 'published' ? 'published' : 'unpublished'} successfully`);
+        
+        // Refresh the course list to ensure we have the latest data
+        await fetchInstructorCourses();
+      }
     } catch (err) {
-      setError('Failed to update course status');
-      console.error('Error updating course:', err);
+      console.error('All toggle publish methods failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update course status';
+      setError(errorMessage);
+      window.alert(`Error: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const totalStudents = courses.reduce((sum, course) => sum + course.enrolledStudents, 0);
-  const publishedCourses = courses.filter(course => course.isPublished).length;
-  const totalRevenue = courses.reduce((sum, course) => sum + (course.price * course.enrolledStudents), 0);
+  // Ensure we handle undefined/NaN values properly
+  const totalStudents = courses.reduce((sum, course) => {
+    const students = course.enrolledStudents || 0;
+    return sum + students;
+  }, 0);
+  
+  const publishedCourses = courses.filter(course => course.status === 'published').length;
+  
+  const totalRevenue = courses.reduce((sum, course) => {
+    const price = typeof course.price === 'number' ? course.price : 0;
+    const students = typeof course.enrolledStudents === 'number' ? course.enrolledStudents : 0;
+    return sum + (price * students);
+  }, 0);
 
   if (loading) {
     return (
@@ -146,7 +302,9 @@ export default function InstructorDashboard() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalRevenue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">
+              ${typeof totalRevenue === 'number' && !isNaN(totalRevenue) ? totalRevenue.toFixed(2) : '0.00'}
+            </div>
             <p className="text-xs text-muted-foreground">
               Total earnings
             </p>
@@ -179,26 +337,42 @@ export default function InstructorDashboard() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="font-semibold text-lg">{course.title}</h3>
-                        <Badge variant={course.isPublished ? "default" : "secondary"}>
-                          {course.isPublished ? 'Published' : 'Draft'}
+                        <Badge variant={course.status === 'published' ? "default" : "secondary"}>
+                          {course.status === 'published' ? 'Published' : 'Draft'}
                         </Badge>
                       </div>
                       <p className="text-gray-600 mb-3 line-clamp-2">{course.description}</p>
                       <div className="flex items-center gap-4 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <Users size={16} />
-                          {course.enrolledStudents} students
+                          {typeof course.enrolledStudents === 'number' ? course.enrolledStudents : 0} students
                         </span>
                         <span>${course.price}</span>
                         <span>Level: {course.difficulty}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 ml-4">
-                      <Link href={`/courses/${course._id}`}>
-                        <Button variant="outline" size="sm">
-                          <Eye size={16} />
-                        </Button>
-                      </Link>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={async () => {
+                          console.log('Viewing course:', course._id);
+                          try {
+                            // First verify the course is accessible with our emergency method
+                            await courseService.emergencyViewCourse(course._id);
+                            
+                            // Try to navigate to the course detail page
+                            window.open(`/courses/${course._id}`, '_blank');
+                          } catch (err) {
+                            console.error('View course error:', err);
+                            
+                            // Fallback - show alert with course details if there's any issue
+                            window.alert(`Course Details:\n\nTitle: ${course.title}\nStatus: ${course.status}\nPrice: $${course.price}\nDifficulty: ${course.difficulty}`);
+                          }
+                        }}
+                      >
+                        <Eye size={16} />
+                      </Button>
                       <Link href={`/instructor/courses/${course._id}/edit`}>
                         <Button variant="outline" size="sm">
                           <Edit size={16} />
@@ -207,9 +381,9 @@ export default function InstructorDashboard() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleTogglePublish(course._id, course.isPublished)}
+                        onClick={() => handleTogglePublish(course._id, course.status)}
                       >
-                        {course.isPublished ? 'Unpublish' : 'Publish'}
+                        {course.status === 'published' ? 'Unpublish' : 'Publish'}
                       </Button>
                       <Button
                         variant="outline"

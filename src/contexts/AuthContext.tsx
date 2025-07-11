@@ -39,14 +39,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Verify token is still valid
         api.get('/auth/me')
           .then(response => {
-            setUser(response.data.user)
+            const userFromServer = response.data.data?.user || response.data.user
+            if (userFromServer) {
+              setUser(userFromServer)
+              // Update stored user data
+              localStorage.setItem('user', JSON.stringify(userFromServer))
+            }
           })
-          .catch(() => {
-            localStorage.removeItem('authToken')
-            localStorage.removeItem('user')
-            setUser(null)
+          .catch((error) => {
+            console.error('Token validation failed:', error)
+            // Only log out if it's a 401 error
+            if (axios.isAxiosError(error) && error.response?.status === 401) {
+              localStorage.removeItem('authToken')
+              localStorage.removeItem('user')
+              setUser(null)
+            }
           })
-      } catch {
+      } catch (error) {
+        console.error('Error parsing stored user data:', error)
         localStorage.removeItem('authToken')
         localStorage.removeItem('user')
       }
@@ -124,22 +134,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // Transform frontend data to backend format
       const backendData = {
-        username: `${credentials.firstName} ${credentials.lastName}`, // Combine firstName + lastName as username
+        username: credentials.username || `${credentials.firstName} ${credentials.lastName}`, // Use provided username or combine firstName + lastName
+        name: `${credentials.firstName} ${credentials.lastName}`, // Add full name field
         email: credentials.email,
         password: credentials.password,
-        role: credentials.role
+        role: credentials.role || 'student' // Default to student if role not provided
       };
       
       console.log('Making registration request to API', { 
         email: backendData.email,
         username: backendData.username,
+        name: backendData.name,
         role: backendData.role 
       });
       
       const response = await api.post<AuthResponse>('/auth/register', backendData);
       console.log('Registration API response:', response.data);
       
-      // Standard API response format with data property
+      // Standard API response format with data property (our expected format)
       if (response.data.success && response.data.data) {
         const { accessToken, user } = response.data.data;
         
@@ -155,19 +167,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       
-      // Handle legacy or alternative response formats
+      // Alternative formats - try different response structures
       let token = null;
       let user = null;
+      let dataField = null;
+      
+      // Check if response data has a data field
+      if (response.data.data) {
+        dataField = response.data.data;
+      } else {
+        dataField = response.data; // Use response.data directly if no data field
+      }
       
       // Try to extract token (could be named accessToken or token)
-      if (response.data.accessToken) {
+      if (dataField.accessToken) {
+        token = dataField.accessToken;
+      } else if (dataField.token) {
+        token = dataField.token;
+      } else if (response.data.accessToken) {
         token = response.data.accessToken;
       } else if (response.data.token) {
         token = response.data.token;
       }
       
       // Try to extract user
-      if (response.data.user) {
+      if (dataField.user) {
+        user = dataField.user;
+      } else if (response.data.user) {
         user = response.data.user;
       }
       
@@ -185,7 +211,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Registration error:', error);
       if (axios.isAxiosError(error) && error.response) {
         console.error('API error response:', error.response.data);
-        const serverMessage = error.response.data?.message || 'Server error';
+        const serverMessage = error.response.data?.message || error.response.data?.error || 'Server error';
         throw new Error(serverMessage);
       } else {
         const errorMessage = error instanceof Error ? error.message : 'Registration failed. Please try again.'

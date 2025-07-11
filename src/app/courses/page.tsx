@@ -161,8 +161,8 @@ export default function CoursesPage() {
                     {course.category}
                   </Badge>
                   <Badge 
-                    variant={course.level === 'Beginner' ? 'default' : 
-                            course.level === 'Intermediate' ? 'secondary' : 'outline'}
+                    variant={course.level === 'beginner' ? 'default' : 
+                            course.level === 'intermediate' ? 'secondary' : 'outline'}
                     className="text-xs"
                   >
                     {course.level}
