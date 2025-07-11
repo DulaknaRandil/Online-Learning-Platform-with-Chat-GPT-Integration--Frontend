@@ -109,7 +109,7 @@ src/
 
 2. **Required Variables:**
    ```
-   NEXT_PUBLIC_API_URL=https://your-backend-api.vercel.app/api
+   NEXT_PUBLIC_API_URL=https://online-learning-platform-with-chat-eight.vercel.app/api
    NEXT_PUBLIC_APP_URL=https://your-app-name.vercel.app
    ```
 

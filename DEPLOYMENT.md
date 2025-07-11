@@ -8,7 +8,7 @@ In your Vercel dashboard, go to **Project Settings > Environment Variables** and
 
 | Variable Name | Value | Environment |
 |---------------|-------|-------------|
-| `NEXT_PUBLIC_API_URL` | `https://your-backend-api.vercel.app/api` | Production, Preview, Development |
+| `NEXT_PUBLIC_API_URL` | `https://online-learning-platform-with-chat-eight.vercel.app/api` | Production, Preview, Development |
 | `NEXT_PUBLIC_APP_URL` | `https://your-app-name.vercel.app` | Production, Preview, Development |
 
 ### 2. Common Issues & Solutions
@@ -40,8 +40,8 @@ In your Vercel dashboard, go to **Project Settings > Environment Variables** and
 
 **For Production:**
 ```
-NEXT_PUBLIC_API_URL=https://online-learning-backend-api.vercel.app/api
-NEXT_PUBLIC_APP_URL=https://online-learning-platform.vercel.app
+NEXT_PUBLIC_API_URL=https://online-learning-platform-with-chat-eight.vercel.app/api
+NEXT_PUBLIC_APP_URL=https://your-frontend-app.vercel.app
 ```
 
 **For Development:**
