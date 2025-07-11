@@ -10,6 +10,11 @@
 !.yarn/releases
 !.yarn/versions
 
+# package lock files (to avoid platform-specific dependencies)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
 # testing
 /coverage
 

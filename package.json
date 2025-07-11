@@ -9,11 +9,10 @@
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "type-check": "tsc --noEmit",
-    "vercel-build": "next build"
+    "postinstall": "next telemetry disable"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.1.1",
-    "@next/swc-win32-x64-msvc": "^15.3.5",
     "@radix-ui/react-progress": "^1.1.7",
     "@tanstack/react-query": "^5.81.5",
     "axios": "^1.10.0",

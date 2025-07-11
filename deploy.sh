@@ -11,6 +11,11 @@ fi
 
 # Install dependencies
 echo "📦 Installing dependencies..."
+# Remove package-lock.json to avoid platform-specific dependencies
+if [ -f "package-lock.json" ]; then
+    echo "🧹 Removing package-lock.json to avoid platform conflicts..."
+    rm package-lock.json
+fi
 npm install
 
 # Run linting

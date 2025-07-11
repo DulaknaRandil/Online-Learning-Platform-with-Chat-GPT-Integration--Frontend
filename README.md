@@ -74,6 +74,46 @@ src/
 - `npm start` - Start the production server
 - `npm run lint` - Run ESLint
 
+## 🚀 Deployment
+
+### Deploying to Vercel
+
+1. **Prepare for deployment**
+   ```bash
+   # Run the deployment preparation script
+   ./deploy.sh
+   ```
+
+2. **Push to GitHub**
+   ```bash
+   git add .
+   git commit -m "Ready for deployment"
+   git push origin main
+   ```
+
+3. **Deploy on Vercel**
+   - Connect your GitHub repository to Vercel
+   - Set environment variables in Vercel dashboard:
+     - `NEXT_PUBLIC_API_URL`: Your backend API URL
+     - `NEXT_PUBLIC_APP_URL`: Your frontend URL
+   - Deploy automatically on push
+
+### Important Deployment Notes
+
+- The project automatically handles platform-specific dependencies
+- `package-lock.json` is ignored to prevent Windows/Linux conflicts
+- SWC dependencies are automatically installed for the target platform
+- Vercel configuration is optimized for Next.js deployment
+
+### Environment Variables
+
+For production deployment, set these variables in your Vercel dashboard:
+
+```env
+NEXT_PUBLIC_API_URL=https://your-backend-api.com/api
+NEXT_PUBLIC_APP_URL=https://your-frontend-domain.com
+```
+
 ## 🎨 UI Features
 
 - **Responsive Design** for all screen sizes
